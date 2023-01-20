@@ -46,16 +46,16 @@ class Handler:
 
 		self.cv_rdr = threading.Condition()
 		self.waiting_rdr = False
-		self.resp_rdr = None
+		self.resp_rdr = ResetDeadReckoningResponse()
 		self.cv_cg = threading.Condition()
 		self.waiting_cg = False
-		self.resp_cg = None
+		self.resp_cg = CalibrateGyroResponse()
 		self.cv_gc = threading.Condition()
 		self.waiting_gc = False
-		self.resp_gc = None
+		self.resp_gc = GetConfigResponse()
 		self.cv_sc = threading.Condition()
 		self.waiting_sc = False
-		self.resp_sc = None
+		self.resp_sc = SetConfigResponse()
 
 	def connect(self):
 		try:
@@ -99,7 +99,8 @@ class Handler:
 			# do_log_raw_data is true: only fill in theDVL using velocity data and publish to dvl/data topic
 
 			if self.do_log_raw_data:
-				rospy.loginfo(raw_data)
+				pass
+				# rospy.loginfo(raw_data)
 
 			if data["type"] == "velocity":
 				self.pub_raw.publish(raw_data)
@@ -163,48 +164,117 @@ class Handler:
 		response_type = data["response_to"]
 		if response_type == "reset_dead_reckoning":
 			with self.cv_rdr:
+				self.resp_rdr.success = data["success"]
 				self.cv_rdr.notifyAll()
 		elif response_type == "calibrate_gyro":
 			with self.cv_cg:
+				self.resp_cg.success = data["success"]
 				self.cv_cg.notifyAll()
 		elif response_type == "get_config":
 			with self.cv_gc:
+				self.resp_gc.success = data["success"]
+				self.resp_gc.speed_of_sound = data["result"]["speed_of_sound"]
+				self.resp_gc.acoustic_enabled = data["result"]["acoustic_enabled"]
+				self.resp_gc.dark_mode_enabled = data["result"]["dark_mode_enabled"]
+				self.resp_gc.mounting_rotation_offset = data["result"]["mounting_rotation_offset"]
+				self.resp_gc.range_mode = data["result"]["range_mode"]
 				self.cv_gc.notifyAll()
 		elif response_type == "set_config":
 			with self.cv_sc:
+				self.resp_sc.success = data["success"]
 				self.cv_sc.notifyAll()
 		else:
 			raise ValueError(f'Unknown response type {response_type}')
 
 	def handle_rdr(self, req):
-		# Wait for response
+		rospy.loginfo("Sending ResetDeadReckoning Request")
 		resp = ResetDeadReckoningResponse()
 		if self.waiting_rdr:
 			resp.success = False
 			return resp
 		else:
 			self.waiting_rdr = True
+
+		cmd_dict = {"command": "reset_dead_reckoning"}
+		cmd = json.dumps(cmd_dict)
+		self.socket.sendall(bytes(cmd + "\n", "utf-8"))
+
 		with self.cv_rdr:
-			resp.success = True
+			self.cv_rdr.wait()
+			rospy.loginfo("Got ResetDeadReckoning Response")
+			resp = self.resp_rdr
+			self.waiting_rdr = False
 			return resp
 
 	def handle_cg(self, req):
-		# Wait for response
+		rospy.loginfo("Sending CalibrateGyro Request")
 		resp = CalibrateGyroResponse()
-		resp.success = True
-		return resp
+		if self.waiting_cg:
+			resp.success = False
+			return resp
+		else:
+			self.waiting_cg = True
+
+		cmd_dict = {"command": "calibrate_gyro"}
+		cmd = json.dumps(cmd_dict)
+		self.socket.sendall(bytes(cmd + "\n", "utf-8"))
+
+		with self.cv_cg:
+			self.cv_cg.wait()
+			rospy.loginfo("Got CalibrateGyro Response")
+			resp = self.resp_cg
+			self.waiting_cg = False
+			return resp
 
 	def handle_gc(self, req):
-		# Wait for response
+		rospy.loginfo("Sending GetConfig Request")
 		resp = GetConfigResponse()
-		resp.success = True
-		return resp
+		if self.waiting_gc:
+			resp.success = False
+			return resp
+		else:
+			self.waiting_gc = True
+
+		cmd_dict = {"command": "get_config"}
+		cmd = json.dumps(cmd_dict)
+		self.socket.sendall(bytes(cmd + "\n", "utf-8"))
+
+		with self.cv_gc:
+			self.cv_gc.wait()
+			rospy.loginfo("Got GetConfig Response")
+			resp = self.resp_gc
+			self.waiting_gc = False
+			return resp
 
 	def handle_sc(self, req):
-		# Wait for response
+		rospy.loginfo("Sending SetConfig Request")
 		resp = SetConfigResponse()
-		resp.success = True
-		return resp
+		if self.waiting_sc:
+			resp.success = False
+			return resp
+		else:
+			self.waiting_sc = True
+
+		cmd_dict = {"command": "set_config", "parameters": dict()}
+		if req.set_speed_of_sound:
+			cmd_dict["parameters"]["speed_of_sound"] = req.speed_of_sound
+		if req.set_acoustic_enabled:
+			cmd_dict["parameters"]["acoustic_enabled"] = req.acoustic_enabled
+		if req.set_dark_mode_enabled:
+			cmd_dict["parameters"]["dark_mode_enabled"] = req.dark_mode_enabled
+		if req.set_mounting_rotation_offset:
+			cmd_dict["parameters"]["mounting_rotation_offset"] = req.mounting_rotation_offset
+		if req.set_range_mode:
+			cmd_dict["parameters"]["range_mode"] = req.range_mode
+		cmd = json.dumps(cmd_dict)
+		self.socket.sendall(bytes(cmd + "\n", "utf-8"))
+
+		with self.cv_sc:
+			self.cv_sc.wait()
+			rospy.loginfo("Got SetConfig Response")
+			resp = self.resp_sc
+			self.waiting_sc = False
+			return resp
 
 
 if __name__ == '__main__':
