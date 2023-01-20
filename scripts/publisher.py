@@ -34,7 +34,7 @@ class Handler:
 
 		self.oldJson = ""
 
-		self.rate = rospy.Rate(10)  # 10hz
+		self.rate = rospy.Rate(10)
 
 		self.pub_raw = rospy.Publisher('dvl/json_data', String, queue_size=10)
 		self.pub = rospy.Publisher('dvl/data', DVL, queue_size=10)
@@ -44,6 +44,14 @@ class Handler:
 		self.srv_gc = rospy.Service('dvl/get_config', GetConfig, self.handle_gc)
 		self.srv_sc = rospy.Service('dvl/set_config', SetConfig, self.handle_sc)
 
+		# Each service has an associated condition variable (CV), waiting flag and response type
+		# When the request is received, it is transformed into a command that is defined by the
+		# DVL protocol. The command is sent to the DVL and the handler goes into a waiting state
+		# as the CV blocks. When the matching response command by the DVL is received, the response
+		# is populated, the waiting handler is notified and the response is forwarded to the service
+		# caller. The waiting flag is set at the beginning of this request-response pattern and unset
+		# once the handler returns. While the waiting flag is set, all incoming requests of the type
+		# are rejected. This ensures that only a single service per type can be processed at a time.
 		self.cv_rdr = threading.Condition()
 		self.waiting_rdr = False
 		self.resp_rdr = ResetDeadReckoningResponse()
