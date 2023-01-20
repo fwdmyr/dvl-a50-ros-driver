@@ -1,0 +1,12 @@
+bool set_speed_of_sound
+float64 speed_of_sound
+bool set_acoustic_enabled
+bool acoustic_enabled
+bool set_dark_mode_enabled
+bool dark_mode_enabled
+bool set_mounting_rotation_offset
+float64 mounting_rotation_offset
+bool set_range_mode
+string range_mode
+---
+bool success
