@@ -3,7 +3,7 @@ import rospy
 from std_msgs.msg import String
 from waterlinked_a50_ros_driver.msg import DVL
 from waterlinked_a50_ros_driver.msg import DVLBeam
-from Tkinter import *
+from tkinter import *
 
 #GUI Setup
 root = Tk()
